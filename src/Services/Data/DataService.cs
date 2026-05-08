@@ -14,7 +14,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
   public QuestData QuestData { get; private set; } = new();
   private string _startArea = "";
   private string _grandCompany = "";
-  private uint _startClass = 0;
+  private List<uint> _startClass = [];
 
   private readonly List<string> _tribes = [
     "Amalj'aa", "Sylph", "Kobold", "Sahagin", "Ixal",
@@ -47,9 +47,9 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
     66067, 66066, 66109
   ];
 
-  private readonly List<uint> _twinAdderQuests = [66216, 66219, 66236, 66641, 67063, 67099];
-  private readonly List<uint> _maelstromQuests = [66217, 66220, 66237, 66640, 67064, 67100];
-  private readonly List<uint> _immortalFlamesQuests = [66218, 66221, 66238, 66642, 67065, 67101];
+  private readonly List<uint> _twinAdderQuests = [66216, 66219, 66236, 66641, 67063, 67099, 67925];
+  private readonly List<uint> _maelstromQuests = [66217, 66220, 66237, 66640, 67064, 67100, 67926];
+  private readonly List<uint> _immortalFlamesQuests = [66218, 66221, 66238, 66642, 67065, 67101, 67927];
 
   private readonly List<uint> _arrShenanigansAdded = [];
   private readonly List<List<uint>> _arrShenanigans = [
@@ -73,7 +73,8 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
 
   private readonly List<uint> _retiredQuests = [
     65603, 66023, 66033, 66034, 66957, 66958, 66964, 66965, 67819, 68629, 68727,
-    71000, 71001, 71003, 71004
+    71000, 71001, 71003, 71004, 69377, 69296, 67635, 67752, 67870, 69508, 69578,
+    65860, 66000, 65841, 65863, 65934, 65940, 65871, 67653
   ];
 
   public Task StartAsync(CancellationToken cancellationToken)
@@ -82,7 +83,6 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
 
     foreach (JournalCategory journalCategory in _dataManager.GetExcelSheet<JournalCategory>())
     {
-      if (journalCategory.RowId == 0) continue;
       string categoryName = journalCategory.Name.ToString();
       string mainCategory = "";
       string subCategory = "";
@@ -115,15 +115,16 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
 
       foreach (JournalGenre journalGenre in _dataManager.GetExcelSheet<JournalGenre>().Where((r) => r.JournalCategory.RowId == journalCategory.RowId))
       {
-        if (journalGenre.RowId == 0) continue;
         string genreName = journalGenre.Name.ToString();
         if (subCategory.IsNullOrEmpty()) subCategory = categoryName;
         if (subCategory == "Special Quests") mainCategory = "Other Quests";
         section = genreName;
+        if (journalGenre.RowId == 0) subCategory = "Quasi-Quests";
 
         foreach (Lumina.Excel.Sheets.Quest quest in _dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().Where((r) => r.JournalGenre.RowId == journalGenre.RowId))
         {
-          if (mainCategory == "Sidequests") section = quest.PlaceName.Value.Name.ToString();
+          if (quest.Name.IsEmpty) continue;
+          if (subCategory.Contains("Sidequests")) section = quest.PlaceName.Value.Name.ToString();
 
           string? start = null;
           if (_gridaniaStartQuests.Contains(quest.RowId)) start = "Gridania";
@@ -142,7 +143,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
             {
               if (_ids.Contains(quest.RowId))
               {
-                if (_arrShenanigansAdded.Contains(quest.RowId)) goto SkipQuest;
+                if (_arrShenanigansAdded.Contains(quest.RowId) || quest.JournalGenre.RowId == 0) goto SkipQuest;
                 ids = _ids;
                 _ids.ForEach(_arrShenanigansAdded.Add);
               }
@@ -244,7 +245,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
     questData.NumComplete = questData.Total = 0;
     if (_startArea == "") DetermineStartArea();
     if (_grandCompany == "") DetermineGrandCompany();
-    if (_startClass == 0) DetermineStartClass();
+    if (_startClass.Count == 0) DetermineStartClass();
 
     if (questData.Categories.Count > 0)
     {
@@ -284,10 +285,13 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           continue;
         }
 
-        if (_startClass != 0 && quest.Ids.Contains(_startClass))
+        foreach (uint startClass in _startClass)
         {
-          questData.Quests.Remove(quest);
-          continue;
+          if (quest.Ids.Contains(startClass))
+          {
+            questData.Quests.Remove(quest);
+            continue;
+          }
         }
 
         // ARR "Call of the Wild" Tribal Alliance Quests
@@ -343,25 +347,25 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
 
   private void DetermineStartClass()
   {
-    _startClass = (uint)(
+    _startClass = (
       // Gladiator
-      QuestManager.IsQuestComplete(65792) && !QuestManager.IsQuestComplete(65822) ? 65822 :
+      QuestManager.IsQuestComplete(65792) && !QuestManager.IsQuestComplete(65822) ? [65822, 65713] :
       // Pugilist
-      QuestManager.IsQuestComplete(66090) && !QuestManager.IsQuestComplete(66089) ? 66089 :
+      QuestManager.IsQuestComplete(66090) && !QuestManager.IsQuestComplete(66089) ? [66089, 65714] :
       // Marauder
-      QuestManager.IsQuestComplete(65849) && !QuestManager.IsQuestComplete(65848) ? 65848 :
+      QuestManager.IsQuestComplete(65849) && !QuestManager.IsQuestComplete(65848) ? [65848, 65715] :
       // Lancer
-      QuestManager.IsQuestComplete(65583) && !QuestManager.IsQuestComplete(65754) ? 65754 :
+      QuestManager.IsQuestComplete(65583) && !QuestManager.IsQuestComplete(65754) ? [65754, 65716] :
       // Archer
-      QuestManager.IsQuestComplete(65582) && !QuestManager.IsQuestComplete(65755) ? 65755 :
+      QuestManager.IsQuestComplete(65582) && !QuestManager.IsQuestComplete(65755) ? [65755, 65717] :
       // Rogue
-      QuestManager.IsQuestComplete(65640) && !QuestManager.IsQuestComplete(65638) ? 65638 :
+      QuestManager.IsQuestComplete(65640) && !QuestManager.IsQuestComplete(65638) ? [65638, 65637] :
       // Conjurer
-      QuestManager.IsQuestComplete(65584) && !QuestManager.IsQuestComplete(65747) ? 65747 :
+      QuestManager.IsQuestComplete(65584) && !QuestManager.IsQuestComplete(65747) ? [65747, 65718] :
       // Thaumaturge
-      QuestManager.IsQuestComplete(65883) && !QuestManager.IsQuestComplete(65882) ? 65882 :
+      QuestManager.IsQuestComplete(65883) && !QuestManager.IsQuestComplete(65882) ? [65882, 65719] :
       // Arcanist
-      QuestManager.IsQuestComplete(65991) && !QuestManager.IsQuestComplete(65990) ? 65990 : 0);
+      QuestManager.IsQuestComplete(65991) && !QuestManager.IsQuestComplete(65990) ? [65990, 65987] : []);
     _logger.Debug($"Start Class {_startClass}");
   }
 }
