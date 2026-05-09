@@ -22,11 +22,19 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
     65708, 65663, 65666, 65596, 65914
   ];
 
+  private readonly List<uint> _gridaniaStartLeves = [
+    546
+  ];
+
   private readonly List<uint> _limsaStartQuests = [
     65644, 65645, 65998, 65999, 66079, 66001, 66002, 66003, 66004, 66005, 65933,
     65938, 65939, 65942, 65948, 65951, 65949, 65950, 66225, 66080, 66226, 66081,
     66082, 65643, 65647, 65648, 65658, 66199, 66229, 66008, 66006, 66009, 66010,
     65936, 65937, 66011, 66012, 66013, 66022, 66014, 66015, 65595, 65941
+  ];
+
+  private readonly List<uint> _limsaStartLeves = [
+    556
   ];
 
   private readonly List<uint> _uldahStartQuests = [
@@ -35,6 +43,10 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
     66164, 66087, 66177, 66088, 66064, 66209, 66130, 65925, 65926, 66223, 65594,
     65877, 66040, 66042, 65878, 66041, 65857, 65840, 65858, 65924, 65844, 65862,
     66067, 66066, 66109
+  ];
+
+  private readonly List<uint> _uldahStartLeves = [
+    566
   ];
 
   private readonly List<uint> _twinAdderQuests = [66216, 66219, 66236, 66641, 67063, 67099, 67925];
@@ -135,6 +147,11 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           if (!leve.Name.ToString().Any(c => c <= 0x7F)) continue;
           section = leve.PlaceNameStart.Value.Name.ToString();
 
+          string? start = null;
+          if (_gridaniaStartLeves.Contains(leve.RowId)) start = "Gridania";
+          if (_limsaStartLeves.Contains(leve.RowId)) start = "Limsa Lominsa";
+          if (_uldahStartLeves.Contains(leve.RowId)) start = "Ul'dah";
+
           AddQuest(mainCategory, subCategory, section, new()
           {
             Title = leve.Name.ToString(),
@@ -142,6 +159,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
             Area = leve.PlaceNameStart.Value.Name.ToString(),
             Level = leve.ClassJobLevel,
             SortKey = leve.RowId,
+            Start = start,
             IsLeve = true
           }, leve.PlaceNameStart.RowId);
         }
