@@ -8,7 +8,7 @@ public class QuestData
   public float NumComplete { get; set; }
   public float Total { get; set; }
   public bool Hide { get; set; }
-  public uint Expansion { get; set; }
+  public uint SortKey { get; set; }
 }
 
 public class Quest
@@ -20,6 +20,6 @@ public class Quest
   public string? Gc { get; set; }
   public int Level { get; set; }
   public bool Hide { get; set; }
-  public uint Expansion { get; set; }
   public uint SortKey { get; set; }
+  public bool IsLeve { get; set; }
 }

@@ -46,16 +46,19 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
     ImGui.TableSetupColumn("##count", ImGuiTableColumnFlags.None, 0.70f);
     ImGui.TableSetupColumn("##percentage", ImGuiTableColumnFlags.None, 0.30f);
 
-    float otherQuestsComplete = _dataService.QuestData.Categories.Last().NumComplete;
-    float otherQuestsTotal = _dataService.QuestData.Categories.Last().Total;
+    float otherQuestsComplete = _dataService.QuestData.Categories.Find((c) => c.Title == "Other Quests")?.NumComplete ?? 0;
+    float otherQuestsTotal = _dataService.QuestData.Categories.Find((c) => c.Title == "Other Quests")?.Total ?? 0;
 
-    float overallComplete = _configuration.ExcludeOtherQuests
-                              ? _dataService.QuestData.NumComplete - otherQuestsComplete
-                              : _dataService.QuestData.NumComplete;
+    float levequestsComplete = _dataService.QuestData.Categories.Find((c) => c.Title == "Levequests")?.NumComplete ?? 0;
+    float levequestsTotal = _dataService.QuestData.Categories.Find((c) => c.Title == "Levequests")?.Total ?? 0;
 
-    float overallTotal = _configuration.ExcludeOtherQuests
-                           ? _dataService.QuestData.Total - otherQuestsTotal
-                           : _dataService.QuestData.Total;
+    float overallComplete = _dataService.QuestData.NumComplete
+                            - (_configuration.ExcludeOtherQuests ? otherQuestsComplete : 0f)
+                            - (_configuration.ExcludeLevequests ? levequestsComplete : 0f);
+
+    float overallTotal = _dataService.QuestData.Total
+                        - (_configuration.ExcludeOtherQuests ? otherQuestsTotal : 0f)
+                        - (_configuration.ExcludeLevequests ? levequestsTotal : 0f);
 
     ImGui.TableNextColumn();
     ImGui.Text("Overall");
@@ -64,20 +67,20 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
     ImGui.Text($"{overallComplete}/{overallTotal}");
     ImGui.Separator();
     ImGui.TableNextColumn();
-    ImGui.Text($"{overallComplete / overallTotal:P2}%");
+    ImGui.Text($"{overallComplete / overallTotal:P2}");
     ImGui.Separator();
     ImGui.TableNextRow();
 
     foreach (QuestData category in _dataService.QuestData.Categories)
     {
-      if (category == _dataService.QuestData.Categories.Last() && _configuration.ExcludeOtherQuests)
+      if ((category.Title == "Levequests" && _configuration.ExcludeLevequests) || (category.Title == "Other Quests" && _configuration.ExcludeOtherQuests))
       {
         ImGui.TableNextColumn();
         ImGui.TextDisabled(category.Title);
         ImGui.TableNextColumn();
         ImGui.TextDisabled($"{category.NumComplete}/{category.Total}");
         ImGui.TableNextColumn();
-        ImGui.TextDisabled($"{category.NumComplete / category.Total:P2}%");
+        ImGui.TextDisabled($"{category.NumComplete / category.Total:P2}");
         ImGui.TableNextRow();
       }
       else
@@ -87,7 +90,7 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
         ImGui.TableNextColumn();
         ImGui.Text($"{category.NumComplete}/{category.Total}");
         ImGui.TableNextColumn();
-        ImGui.Text($"{category.NumComplete / category.Total:P2}%");
+        ImGui.Text($"{category.NumComplete / category.Total:P2}");
         ImGui.TableNextRow();
       }
     }
@@ -350,11 +353,11 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
     using ImRaii.ChildDisposable child = ImRaii.Child("##settingsTab", ImGuiHelpers.ScaledVector2(0), true);
     if (!child.Success) return;
 
-    ImGui.SetNextItemWidth(130);
+    ImGui.SetNextItemWidth(130 * ImGuiHelpers.GlobalScale);
     int displayOption = _configuration.DisplayOption;
     string[] displayList = ["Show All", "Show Complete", "Show Incomplete"];
 
-    using (ImRaii.ComboDisposable combo = ImRaii.Combo("displayOption", displayList[displayOption]))
+    using (ImRaii.ComboDisposable combo = ImRaii.Combo("##displayOption", displayList[displayOption]))
     {
       if (combo.Success)
       {
@@ -399,6 +402,13 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
       _configuration.ExcludeOtherQuests = excludeOtherQuests;
       _configuration.Save();
     }
+
+    bool excludeLevequests = _configuration.ExcludeLevequests;
+    if (ImGui.Checkbox("Exclude \'Levequests\' from Overall", ref excludeLevequests))
+    {
+      _configuration.ExcludeLevequests = excludeLevequests;
+      _configuration.Save();
+    }
   }
 
   private void ResetSelections()
@@ -428,9 +438,17 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
 
   private void OpenAreaMap(Types.Quest quest)
   {
-    IEnumerable<Lumina.Excel.Sheets.Quest> questEnumerable = _dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().Where(q => quest.Ids.Contains(q.RowId) && q.IssuerLocation.ValueNullable != null);
-    Level level = questEnumerable.First().IssuerLocation.Value;
-    MapLinkPayload mapLink = new(level.Territory.RowId, level.Map.RowId, (int)(level.X * 1_000f), (int)(level.Z * 1_000f));
-    _gameGui.OpenMapWithMapLink(mapLink);
+    if (quest.IsLeve)
+    {
+      Level level = _dataManager.GetExcelSheet<Leve>().First(q => quest.Ids.Contains(q.RowId) && q.LevelLevemete.ValueNullable != null).LevelLevemete.Value;
+      MapLinkPayload mapLink = new(level.Territory.RowId, level.Map.RowId, (int)(level.X * 1_000f), (int)(level.Z * 1_000f));
+      _gameGui.OpenMapWithMapLink(mapLink);
+    }
+    else
+    {
+      Level level = _dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().First(q => quest.Ids.Contains(q.RowId) && q.IssuerLocation.ValueNullable != null).IssuerLocation.Value;
+      MapLinkPayload mapLink = new(level.Territory.RowId, level.Map.RowId, (int)(level.X * 1_000f), (int)(level.Z * 1_000f));
+      _gameGui.OpenMapWithMapLink(mapLink);
+    }
   }
 }

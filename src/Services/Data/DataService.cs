@@ -3,7 +3,6 @@ namespace QuestTracker.Services;
 public interface IDataService : IHostedService
 {
   QuestData QuestData { get; }
-  bool IsQuestComplete(uint quest);
   bool IsQuestComplete(Types.Quest quest);
   void UpdateQuestData();
 }
@@ -15,15 +14,6 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
   private string _startArea = "";
   private string _grandCompany = "";
   private List<uint> _startClass = [];
-
-  private readonly List<string> _tribes = [
-    "Amalj'aa", "Sylph", "Kobold", "Sahagin", "Ixal",
-    "Vanu Vanu", "Vath", "Moogle",
-    "Kojin", "Ananta", "Namazu",
-    "Pixie", "Qitari", "Dwarf",
-    "Arkasodara", "Omicron", "Loporrit",
-    "Yok Huy", "Mamool Ja", "Pelupelu",
-  ];
 
   private readonly List<uint> _gridaniaStartQuests = [
     65621, 65659, 65660, 65564, 65737, 65981, 65664, 69390, 65711, 65661, 69391,
@@ -83,48 +73,18 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
 
     foreach (JournalCategory journalCategory in _dataManager.GetExcelSheet<JournalCategory>())
     {
-      string categoryName = journalCategory.Name.ToString();
-      string mainCategory = "";
-      string subCategory = "";
-      string section = "";
-
-      if (categoryName.Contains("Main Scenario Quests")) mainCategory = "Main Scenario";
-      if (categoryName.Contains("Chronicles of a New Era")) mainCategory = "Chronicles of a New Era";
-      if (categoryName.Contains("YoRHa")) mainCategory = "Chronicles of a New Era";
-      foreach (string tribe in _tribes)
-      {
-        if (categoryName.Contains(tribe))
-        {
-          mainCategory = "Tribal Quests";
-          subCategory = $"{tribe} Quests";
-        }
-      }
-      if (categoryName.Contains("Intersocietal Quests"))
-      {
-        mainCategory = "Tribal Quests";
-        subCategory = "Intersocietal Quests";
-      }
-      if (categoryName.Contains("Disciple")) mainCategory = "Class & Job Quests";
-      if (categoryName.Contains("Crystalline Mean")) mainCategory = "Class & Job Quests";
-      if (categoryName.Contains("Studium")) mainCategory = "Class & Job Quests";
-      if (categoryName.Contains("Wachumeqimeqi")) mainCategory = "Class & Job Quests";
-      if (categoryName.Contains("Role Quests")) mainCategory = "Class & Job Quests";
-      if (categoryName.Contains("Grand Company Quests")) mainCategory = "Other Quests";
-      if (categoryName.Contains("Seasonal Events")) mainCategory = "Other Quests";
-      if (mainCategory.IsNullOrEmpty()) mainCategory = "Sidequests";
+      string mainCategory = Regex.Replace(journalCategory.JournalSection.ValueNullable?.Name.ToString() ?? "Other Quests", @"\s*\([^)]*\)", "").Trim();
+      string subCategory = journalCategory.Name.ToString();
 
       foreach (JournalGenre journalGenre in _dataManager.GetExcelSheet<JournalGenre>().Where((r) => r.JournalCategory.RowId == journalCategory.RowId))
       {
-        string genreName = journalGenre.Name.ToString();
-        if (subCategory.IsNullOrEmpty()) subCategory = categoryName;
-        if (subCategory == "Special Quests") mainCategory = "Other Quests";
-        section = genreName;
         if (journalGenre.RowId == 0) subCategory = "Quasi-Quests";
+        string section = journalGenre.Name.ToString();
 
-        foreach (Lumina.Excel.Sheets.Quest quest in _dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().Where((r) => r.JournalGenre.RowId == journalGenre.RowId))
+        foreach (Lumina.Excel.Sheets.Quest quest in _dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().Where((r) => r.JournalGenre.RowId == journalGenre.RowId && !r.Name.IsEmpty))
         {
-          if (quest.Name.IsEmpty) continue;
-          if (subCategory.Contains("Sidequests")) section = quest.PlaceName.Value.Name.ToString();
+          bool isSidequestCategory = subCategory.Contains("Sidequests");
+          if (isSidequestCategory) section = quest.PlaceName.Value.Name.ToString();
 
           string? start = null;
           if (_gridaniaStartQuests.Contains(quest.RowId)) start = "Gridania";
@@ -161,23 +121,65 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
             Ids = ids,
             Area = quest.PlaceName.Value.Name.ToString(),
             Level = quest.ClassJobLevel[0],
-            Expansion = quest.Expansion.RowId + 2,
             SortKey = quest.SortKey,
             Gc = gc,
             Start = start,
-          });
+          }, sortKey: isSidequestCategory ? quest.PlaceName.RowId : 0);
 
         SkipQuest:
           continue;
         }
+
+        foreach (Leve leve in _dataManager.GetExcelSheet<Leve>().Where((r) => r.JournalGenre.RowId == journalGenre.RowId && !r.Name.IsEmpty))
+        {
+          if (!leve.Name.ToString().Any(c => c <= 0x7F)) continue;
+          section = leve.PlaceNameStart.Value.Name.ToString();
+
+          AddQuest(mainCategory, subCategory, section, new()
+          {
+            Title = leve.Name.ToString(),
+            Ids = [leve.RowId],
+            Area = leve.PlaceNameStart.Value.Name.ToString(),
+            Level = leve.ClassJobLevel,
+            SortKey = leve.RowId,
+            IsLeve = true
+          }, leve.PlaceNameStart.RowId);
+        }
       }
     }
 
+    List<string> mainCategoryOrder = ["Main Scenario", "Chronicles of a New Era", "Sidequests", "Allied Society Quests", "Class & Job Quests", "Other Quests", "Levequests"];
+    RawQuestData.Categories.Sort((a, b) =>
+    {
+      int ia = mainCategoryOrder.IndexOf(a.Title);
+      int ib = mainCategoryOrder.IndexOf(b.Title);
+      if (ia < 0) ia = int.MaxValue;
+      if (ib < 0) ib = int.MaxValue;
+      if (ia != ib) return ia.CompareTo(ib);
+      return string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase);
+    });
+
     foreach (QuestData questData in RawQuestData.Categories)
     {
-      questData.Categories.Sort((a, b) => a.Expansion.CompareTo(b.Expansion));
+      if (questData.Title == "Allied Society Quests")
+      {
+        List<string> tribeOrder = [.. _dataManager.GetExcelSheet<BeastTribe>().Select((r) => r.NameRelation.ToString()).ToList(), "Intersocietal"];
+        questData.Categories.Sort((a, b) =>
+        {
+          string fa = a.Title.Split(' ')[0];
+          string fb = b.Title.Split(' ')[0];
+          int ia = tribeOrder.FindIndex(t => t.Contains(fa, StringComparison.OrdinalIgnoreCase));
+          int ib = tribeOrder.FindIndex(t => t.Contains(fb, StringComparison.OrdinalIgnoreCase));
+          if (ia < 0) ia = int.MaxValue;
+          if (ib < 0) ib = int.MaxValue;
+          if (ia != ib) return ia.CompareTo(ib);
+          return string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase);
+        });
+      }
+
       foreach (QuestData c1 in questData.Categories)
       {
+        c1.Categories.Sort((a, b) => a.SortKey.CompareTo(b.SortKey));
         foreach (QuestData c2 in c1.Categories)
         {
           c2.Quests.Sort((a, b) => a.SortKey.CompareTo(b.SortKey));
@@ -198,10 +200,13 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
 
   private void OnLogin()
   {
+    _startArea = "";
+    _grandCompany = "";
+    _startClass = [];
     QuestData = RawQuestData;
   }
 
-  private void AddQuest(string category, string subCategory, string section, Types.Quest quest)
+  private void AddQuest(string category, string subCategory, string section, Types.Quest quest, uint sortKey = 0)
   {
     QuestData FindOrCreateCategory(List<QuestData> list, string title)
     {
@@ -217,21 +222,18 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
     QuestData categoryNode = FindOrCreateCategory(RawQuestData.Categories, category);
     QuestData subCategoryNode = FindOrCreateCategory(categoryNode.Categories, subCategory);
     QuestData sectionNode = FindOrCreateCategory(subCategoryNode.Categories, section);
-
-    if (subCategoryNode.Expansion == 0) subCategoryNode.Expansion = quest.Expansion;
+    sectionNode.SortKey = sortKey;
     sectionNode.Quests.Add(quest);
   }
 
-
-  public bool IsQuestComplete(uint id)
+  public unsafe bool IsQuestComplete(Types.Quest quest)
   {
-    return QuestManager.IsQuestComplete(id);
-  }
+    if (quest.IsLeve)
+      return QuestManager.Instance()->IsLevequestComplete((ushort)quest.Ids[0]);
 
-  public bool IsQuestComplete(Types.Quest quest)
-  {
     foreach (uint id in quest.Ids)
-      if (IsQuestComplete(id)) return true;
+      if (QuestManager.IsQuestComplete(id)) return true;
+
     return false;
   }
 

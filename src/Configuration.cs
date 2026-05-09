@@ -5,9 +5,10 @@ public class Configuration : IPluginConfiguration
 {
   public int Version { get; set; } = 0;
   public bool ShowCount { get; set; } = true;
-  public bool ShowPercentage { get; set; }
-  public bool ExcludeOtherQuests { get; set; }
-  public int DisplayOption { get; set; }
+  public bool ShowPercentage { get; set; } = true;
+  public bool ExcludeOtherQuests { get; set; } = false;
+  public bool ExcludeLevequests { get; set; } = false;
+  public int DisplayOption { get; set; } = 0;
 
   [NonSerialized]
   private IDalamudPluginInterface PluginInterface = null!;
