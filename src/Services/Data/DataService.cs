@@ -74,9 +74,17 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
   ];
 
   private readonly List<uint> _retiredQuests = [
-    65603, 66023, 66033, 66034, 66957, 66958, 66964, 66965, 67819, 68629, 68727,
-    71000, 71001, 71003, 71004, 69377, 69296, 67635, 67752, 67870, 69508, 69578,
-    65860, 66000, 65841, 65863, 65934, 65940, 65871, 67653
+    65603, 65616, 65692, 65695, 65732, 65734, 65841, 65860, 65863, 65871, 65910,
+    65918, 65934, 65940, 66000, 66023, 66033, 66034, 66288, 66351, 66352, 66356,
+    66383, 66390, 66407, 66413, 66417, 66432, 66461, 66462, 66490, 66507, 66510,
+    66575, 66578, 66582, 66713, 66715, 66717, 66718, 66719, 66720, 66721, 66722,
+    66723, 66885, 66887, 66890, 66891, 66893, 66964, 66965, 66985, 66986, 66987,
+    66990, 66991, 67097, 67098, 67635, 67653, 67752, 67819, 67870, 68629, 68727,
+    69296, 69377, 69508, 69578, 71000, 71001, 71003, 71004
+  ];
+
+  private readonly List<uint> _retiredLeves = [
+    502, 519, 542, 544, 744
   ];
 
   public Task StartAsync(CancellationToken cancellationToken)
@@ -152,6 +160,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           if (_limsaStartLeves.Contains(leve.RowId)) start = "Limsa Lominsa";
           if (_uldahStartLeves.Contains(leve.RowId)) start = "Ul'dah";
 
+          if (_retiredLeves.Contains(leve.RowId)) continue;
           AddQuest(mainCategory, subCategory, section, new()
           {
             Title = leve.Name.ToString(),
@@ -333,7 +342,13 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
             // An Ill-conceived Venture
             (QuestManager.IsQuestComplete(66968) && (quest.Ids.Contains(66969) || quest.Ids.Contains(66970))) ||
             (QuestManager.IsQuestComplete(66969) && (quest.Ids.Contains(66968) || quest.Ids.Contains(66970))) ||
-            (QuestManager.IsQuestComplete(66970) && (quest.Ids.Contains(66968) || quest.Ids.Contains(66969))))
+            (QuestManager.IsQuestComplete(66970) && (quest.Ids.Contains(66968) || quest.Ids.Contains(66969))) ||
+            // A Self-Improving Man | If I Had a Glamour
+            (QuestManager.IsQuestComplete(66957) && quest.Ids.Contains(68553)) ||
+            (QuestManager.IsQuestComplete(68553) && quest.Ids.Contains(66957)) ||
+            // Submission Impossible | Absolutely Glamourous
+            (QuestManager.IsQuestComplete(66958) && quest.Ids.Contains(68554)) ||
+            (QuestManager.IsQuestComplete(68554) && quest.Ids.Contains(66958)))
         {
           questData.Quests.Remove(quest);
         }
