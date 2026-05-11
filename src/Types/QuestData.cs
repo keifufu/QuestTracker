@@ -3,6 +3,7 @@ namespace QuestTracker.Types;
 public class QuestData
 {
   public string Title { get; set; } = "";
+  public string EnglishTitle { get; set; } = "";
   public List<QuestData> Categories { get; set; } = [];
   public List<Quest> Quests { get; set; } = [];
   public float NumComplete { get; set; }

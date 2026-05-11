@@ -46,11 +46,11 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
     ImGui.TableSetupColumn("##count", ImGuiTableColumnFlags.None, 0.70f);
     ImGui.TableSetupColumn("##percentage", ImGuiTableColumnFlags.None, 0.30f);
 
-    float otherQuestsComplete = _dataService.QuestData.Categories.Find((c) => c.Title == "Other Quests")?.NumComplete ?? 0;
-    float otherQuestsTotal = _dataService.QuestData.Categories.Find((c) => c.Title == "Other Quests")?.Total ?? 0;
+    float otherQuestsComplete = _dataService.QuestData.Categories.Find((c) => c.Title == _dataService.OtherQuestsTitle)?.NumComplete ?? 0;
+    float otherQuestsTotal = _dataService.QuestData.Categories.Find((c) => c.Title == _dataService.OtherQuestsTitle)?.Total ?? 0;
 
-    float levequestsComplete = _dataService.QuestData.Categories.Find((c) => c.Title == "Levequests")?.NumComplete ?? 0;
-    float levequestsTotal = _dataService.QuestData.Categories.Find((c) => c.Title == "Levequests")?.Total ?? 0;
+    float levequestsComplete = _dataService.QuestData.Categories.Find((c) => c.Title == _dataService.LevequestsTitle)?.NumComplete ?? 0;
+    float levequestsTotal = _dataService.QuestData.Categories.Find((c) => c.Title == _dataService.LevequestsTitle)?.Total ?? 0;
 
     float overallComplete = _dataService.QuestData.NumComplete
                             - (_configuration.ExcludeOtherQuests ? otherQuestsComplete : 0f)
@@ -73,7 +73,7 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
 
     foreach (QuestData category in _dataService.QuestData.Categories)
     {
-      if ((category.Title == "Levequests" && _configuration.ExcludeLevequests) || (category.Title == "Other Quests" && _configuration.ExcludeOtherQuests))
+      if ((category.Title == _dataService.LevequestsTitle && _configuration.ExcludeLevequests) || (category.Title == _dataService.OtherQuestsTitle && _configuration.ExcludeOtherQuests))
       {
         ImGui.TableNextColumn();
         ImGui.TextDisabled(category.Title);

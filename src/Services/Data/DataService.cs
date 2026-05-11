@@ -3,6 +3,8 @@ namespace QuestTracker.Services;
 public interface IDataService : IHostedService
 {
   QuestData QuestData { get; }
+  string LevequestsTitle { get; }
+  string OtherQuestsTitle { get; }
   bool IsQuestComplete(Types.Quest quest);
   void UpdateQuestData();
 }
@@ -84,26 +86,52 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
   ];
 
   private readonly List<uint> _retiredLeves = [
-    502, 519, 542, 544, 744
+    // Actually retired Leves
+    502, 519, 542, 544, 744,
+    // Leves that have no english translation in the sheets and are probably unused
+    508, 514, 525, 531, 552, 554, 562, 564, 582, 597, 822, 827, 832,
   ];
+
+  public string LevequestsTitle { get; private set; } = "";
+  public string OtherQuestsTitle { get; private set; } = "";
 
   public Task StartAsync(CancellationToken cancellationToken)
   {
     _clientState.Login += OnLogin;
 
-    foreach (JournalCategory journalCategory in _dataManager.GetExcelSheet<JournalCategory>())
-    {
-      string mainCategory = Regex.Replace(journalCategory.JournalSection.ValueNullable?.Name.ToString() ?? "Other Quests", @"\s*\([^)]*\)", "").Trim();
-      string subCategory = journalCategory.Name.ToString();
+    ClientLanguage lang = _clientState.ClientLanguage;
 
-      foreach (JournalGenre journalGenre in _dataManager.GetExcelSheet<JournalGenre>().Where((r) => r.JournalCategory.RowId == journalCategory.RowId))
+    List<uint> sidequestCategories = [];
+    foreach (JournalCategory journalCategory in _dataManager.GetExcelSheet<JournalCategory>(ClientLanguage.English))
+    {
+      if (journalCategory.Name.ToString().Contains("Sidequests"))
+      {
+        sidequestCategories.Add(journalCategory.RowId);
+      }
+    }
+
+    JournalSection otherQuests = _dataManager.GetExcelSheet<JournalSection>(ClientLanguage.English).FirstOrNull(r => r.Name == "Other Quests") ?? throw new Exception("Missing 'Other Quests'.");
+    string defaultMainCategory = _dataManager.GetExcelSheet<JournalSection>(lang).First(r => r.RowId == otherQuests.RowId).Name.ToString();
+    string defaultMainCategoryEnglish = otherQuests.Name.ToString();
+
+    foreach (JournalCategory journalCategory in _dataManager.GetExcelSheet<JournalCategory>(lang))
+    {
+      bool isSidequestCategory = sidequestCategories.Contains(journalCategory.RowId);
+      string mainCategory = TrimJournalSection(journalCategory.JournalSection.ValueNullable?.Name.ToString() ?? defaultMainCategory);
+      string englishMainCategory = TrimJournalSection(_dataManager.GetExcelSheet<JournalCategory>(ClientLanguage.English).GetRow(journalCategory.RowId).JournalSection.ValueNullable?.Name.ToString() ?? defaultMainCategoryEnglish);
+      string subCategory = journalCategory.Name.ToString();
+      string englishSubCategory = _dataManager.GetExcelSheet<JournalCategory>(ClientLanguage.English).GetRow(journalCategory.RowId).Name.ToString();
+
+      if (englishMainCategory == "Levequests") LevequestsTitle = mainCategory;
+      if (englishMainCategory == "Other Quests") OtherQuestsTitle = mainCategory;
+
+      foreach (JournalGenre journalGenre in _dataManager.GetExcelSheet<JournalGenre>(lang).Where((r) => r.JournalCategory.RowId == journalCategory.RowId))
       {
         if (journalGenre.RowId == 0) subCategory = "Quasi-Quests";
         string section = journalGenre.Name.ToString();
 
-        foreach (Lumina.Excel.Sheets.Quest quest in _dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().Where((r) => r.JournalGenre.RowId == journalGenre.RowId && !r.Name.IsEmpty))
+        foreach (Lumina.Excel.Sheets.Quest quest in _dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>(lang).Where((r) => r.JournalGenre.RowId == journalGenre.RowId && !r.Name.IsEmpty))
         {
-          bool isSidequestCategory = subCategory.Contains("Sidequests");
           if (isSidequestCategory) section = quest.PlaceName.Value.Name.ToString();
 
           string? start = null;
@@ -135,7 +163,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           }
 
           if (_retiredQuests.Contains(quest.RowId)) continue;
-          AddQuest(mainCategory, subCategory, section, new()
+          AddQuest((mainCategory, englishMainCategory), (subCategory, englishSubCategory), section, new()
           {
             Title = quest.Name.ToString(),
             Ids = ids,
@@ -150,9 +178,8 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           continue;
         }
 
-        foreach (Leve leve in _dataManager.GetExcelSheet<Leve>().Where((r) => r.JournalGenre.RowId == journalGenre.RowId && !r.Name.IsEmpty))
+        foreach (Leve leve in _dataManager.GetExcelSheet<Leve>(lang).Where((r) => r.JournalGenre.RowId == journalGenre.RowId && !r.Name.IsEmpty))
         {
-          if (!leve.Name.ToString().Any(c => c <= 0x7F)) continue;
           section = leve.PlaceNameStart.Value.Name.ToString();
 
           string? start = null;
@@ -161,7 +188,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           if (_uldahStartLeves.Contains(leve.RowId)) start = "Ul'dah";
 
           if (_retiredLeves.Contains(leve.RowId)) continue;
-          AddQuest(mainCategory, subCategory, section, new()
+          AddQuest((mainCategory, englishMainCategory), (subCategory, englishSubCategory), section, new()
           {
             Title = leve.Name.ToString(),
             Ids = [leve.RowId],
@@ -178,29 +205,29 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
     List<string> mainCategoryOrder = ["Main Scenario", "Chronicles of a New Era", "Sidequests", "Allied Society Quests", "Class & Job Quests", "Other Quests", "Levequests"];
     RawQuestData.Categories.Sort((a, b) =>
     {
-      int ia = mainCategoryOrder.IndexOf(a.Title);
-      int ib = mainCategoryOrder.IndexOf(b.Title);
+      int ia = mainCategoryOrder.IndexOf(a.EnglishTitle);
+      int ib = mainCategoryOrder.IndexOf(b.EnglishTitle);
       if (ia < 0) ia = int.MaxValue;
       if (ib < 0) ib = int.MaxValue;
       if (ia != ib) return ia.CompareTo(ib);
-      return string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase);
+      return string.Compare(a.EnglishTitle, b.EnglishTitle, StringComparison.OrdinalIgnoreCase);
     });
 
     foreach (QuestData questData in RawQuestData.Categories)
     {
-      if (questData.Title == "Allied Society Quests")
+      if (questData.EnglishTitle == "Allied Society Quests")
       {
-        List<string> tribeOrder = [.. _dataManager.GetExcelSheet<BeastTribe>().Select((r) => r.NameRelation.ToString()).ToList(), "Intersocietal"];
+        List<string> tribeOrder = [.. _dataManager.GetExcelSheet<BeastTribe>(ClientLanguage.English).Select((r) => r.NameRelation.ToString()).ToList(), "Intersocietal"];
         questData.Categories.Sort((a, b) =>
         {
-          string fa = a.Title.Split(' ')[0];
-          string fb = b.Title.Split(' ')[0];
+          string fa = a.EnglishTitle.Split(' ')[0];
+          string fb = b.EnglishTitle.Split(' ')[0];
           int ia = tribeOrder.FindIndex(t => t.Contains(fa, StringComparison.OrdinalIgnoreCase));
           int ib = tribeOrder.FindIndex(t => t.Contains(fb, StringComparison.OrdinalIgnoreCase));
           if (ia < 0) ia = int.MaxValue;
           if (ib < 0) ib = int.MaxValue;
           if (ia != ib) return ia.CompareTo(ib);
-          return string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase);
+          return string.Compare(a.EnglishTitle, b.EnglishTitle, StringComparison.OrdinalIgnoreCase);
         });
       }
 
@@ -218,6 +245,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
 
     return _logger.ServiceLifecycle();
   }
+
   public Task StopAsync(CancellationToken cancellationToken)
   {
     _clientState.Login -= OnLogin;
@@ -233,14 +261,19 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
     QuestData = RawQuestData;
   }
 
-  private void AddQuest(string category, string subCategory, string section, Types.Quest quest, uint sortKey = 0)
+  private string TrimJournalSection(string journalSection)
   {
-    QuestData FindOrCreateCategory(List<QuestData> list, string title)
+    return Regex.Replace(Regex.Replace(journalSection, @"\s*\([^)]*\)", ""), @"[12]\uFF08.*?\uFF09", "").Trim();
+  }
+
+  private void AddQuest((string localizedCategory, string englishCategory) category, (string localizedSubCategory, string englishSubCategory) subCategory, string section, Types.Quest quest, uint sortKey = 0)
+  {
+    QuestData FindOrCreateCategory(List<QuestData> list, (string localizedTitle, string englishTitle) title)
     {
-      QuestData? node = list.FirstOrDefault(c => string.Equals(c.Title, title, StringComparison.Ordinal));
+      QuestData? node = list.FirstOrDefault(c => string.Equals(c.Title, title.localizedTitle, StringComparison.Ordinal));
       if (node == null)
       {
-        node = new QuestData { Title = title };
+        node = new QuestData { Title = title.localizedTitle, EnglishTitle = title.englishTitle };
         list.Add(node);
       }
       return node;
@@ -248,7 +281,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
 
     QuestData categoryNode = FindOrCreateCategory(RawQuestData.Categories, category);
     QuestData subCategoryNode = FindOrCreateCategory(categoryNode.Categories, subCategory);
-    QuestData sectionNode = FindOrCreateCategory(subCategoryNode.Categories, section);
+    QuestData sectionNode = FindOrCreateCategory(subCategoryNode.Categories, (section, ""));
     sectionNode.SortKey = sortKey;
     sectionNode.Quests.Add(quest);
   }
