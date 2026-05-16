@@ -5,12 +5,15 @@ public interface IDataService : IHostedService
   QuestData QuestData { get; }
   string LevequestsTitle { get; }
   string OtherQuestsTitle { get; }
+  event System.Action? OnReset;
+  void Reset();
   bool IsQuestComplete(Types.Quest quest);
   void UpdateQuestData();
 }
 
 public class DataService(ILogger _logger, Configuration _configuration, IDataManager _dataManager, IClientState _clientState) : IDataService
 {
+  public event System.Action? OnReset;
   public QuestData RawQuestData { get; private set; } = new();
   public QuestData QuestData { get; private set; } = new();
   private string _startArea = "";
@@ -20,8 +23,8 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
   private readonly List<uint> _gridaniaStartQuests = [
     65621, 65659, 65660, 65564, 65737, 65981, 65664, 69390, 65711, 65661, 69391,
     65665, 65712, 65912, 65913, 65915, 65916, 65917, 65920, 65923, 65697, 65982,
-    65983, 65984, 65985, 66043, 66210, 65575, 65537, 65568, 65570, 65573, 65756,
-    65708, 65663, 65666, 65596, 65914
+    65983, 65984, 65985, 66043, 65575, 65537, 65568, 65570, 65573, 65756, 65708,
+    65663, 65666, 65596, 65914
   ];
 
   private readonly List<uint> _gridaniaStartLeves = [
@@ -75,6 +78,18 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
     [66702, 66706, 66710], [66699, 66703, 66707]
   ];
 
+  private readonly List<List<uint>> _exlusiveQuests = [
+    [67001, 67002, 67003], // ARR "Call of the Wild" Tribal Alliance Quests
+    [69256, 69257], // YorHa "Heads or Tails"
+    [69336, 69337], // Qitari "The First Stela"
+    [69338, 69339], // Qitari "The Second Stela"
+    [69340, 69341], // Qitari "The Third Stela"
+    [66968, 66969, 66970], // An Ill-conceived Venture
+    [66957, 68553], // A Self-Improving Man | If I Had a Glamour
+    [66958, 68554], // Submission Impossible | Absolutely Glamourous
+    [65603, 65670], // School of Hard Nocks (Retired) | Training with Leih
+  ];
+
   private readonly List<uint> _retiredQuests = [
     65603, 65616, 65692, 65695, 65732, 65734, 65841, 65860, 65863, 65871, 65910,
     65918, 65934, 65940, 66000, 66023, 66033, 66034, 66288, 66351, 66352, 66356,
@@ -87,7 +102,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
 
   private readonly List<uint> _retiredLeves = [
     // Actually retired Leves
-    502, 519, 542, 544, 744,
+    502, 519, 542, 544,
     // Leves that have no english translation in the sheets and are probably unused
     508, 514, 525, 531, 552, 554, 562, 564, 582, 597, 822, 827, 832,
   ];
@@ -97,7 +112,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
 
   public Task StartAsync(CancellationToken cancellationToken)
   {
-    _clientState.Login += OnLogin;
+    _clientState.Login += Reset;
 
     ClientLanguage lang = _clientState.ClientLanguage;
 
@@ -139,6 +154,9 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           if (_limsaStartQuests.Contains(quest.RowId)) start = "Limsa Lominsa";
           if (_uldahStartQuests.Contains(quest.RowId)) start = "Ul'dah";
 
+          // Call of the Sea. Gridania and Limsa Lominsa starts share this quest, Ul'dah has its own.
+          if (quest.RowId == 66210) start = "Gridania & Limsa Lominsa";
+
           string? gc = null;
           if (_twinAdderQuests.Contains(quest.RowId)) gc = "Order of the Twin Adder";
           if (_maelstromQuests.Contains(quest.RowId)) gc = "Maelstrom";
@@ -162,7 +180,6 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
             }
           }
 
-          if (_retiredQuests.Contains(quest.RowId)) continue;
           AddQuest((mainCategory, englishMainCategory), (subCategory, englishSubCategory), section, new()
           {
             Title = quest.Name.ToString(),
@@ -241,24 +258,25 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
       }
     }
 
-    QuestData = RawQuestData;
+    QuestData = (QuestData)RawQuestData.Clone();
 
     return _logger.ServiceLifecycle();
   }
 
   public Task StopAsync(CancellationToken cancellationToken)
   {
-    _clientState.Login -= OnLogin;
+    _clientState.Login -= Reset;
 
     return _logger.ServiceLifecycle();
   }
 
-  private void OnLogin()
+  public void Reset()
   {
     _startArea = "";
     _grandCompany = "";
     _startClass = [];
-    QuestData = RawQuestData;
+    QuestData = (QuestData)RawQuestData.Clone();
+    OnReset?.Invoke();
   }
 
   private string TrimJournalSection(string journalSection)
@@ -325,7 +343,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
       questData.Hide = true;
       foreach (Types.Quest? quest in questData.Quests.ToList())
       {
-        if (!_startArea.IsNullOrEmpty() && !quest.Start.IsNullOrEmpty() && _startArea != quest.Start)
+        if (!_startArea.IsNullOrEmpty() && !quest.Start.IsNullOrEmpty() && !quest.Start.Contains(_startArea))
         {
           if (IsQuestComplete(quest))
           {
@@ -356,34 +374,22 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           }
         }
 
-        // ARR "Call of the Wild" Tribal Alliance Quests
-        if ((QuestManager.IsQuestComplete(67001) && (quest.Ids.Contains(67002) || quest.Ids.Contains(67003))) ||
-            (QuestManager.IsQuestComplete(67002) && (quest.Ids.Contains(67001) || quest.Ids.Contains(67003))) ||
-            (QuestManager.IsQuestComplete(67003) && (quest.Ids.Contains(67001) || quest.Ids.Contains(67002))) ||
-            // YorHa "Heads or Tails"
-            (QuestManager.IsQuestComplete(69256) && quest.Ids.Contains(69257)) ||
-            (QuestManager.IsQuestComplete(69257) && quest.Ids.Contains(69256)) ||
-            // Qitari "The First Stela"
-            (QuestManager.IsQuestComplete(69336) && quest.Ids.Contains(69337)) ||
-            (QuestManager.IsQuestComplete(69337) && quest.Ids.Contains(69336)) ||
-            // Qitari "The Second Stela"
-            (QuestManager.IsQuestComplete(69338) && quest.Ids.Contains(69339)) ||
-            (QuestManager.IsQuestComplete(69339) && quest.Ids.Contains(69338)) ||
-            // Qitari "The Third Stela"
-            (QuestManager.IsQuestComplete(69340) && quest.Ids.Contains(69341)) ||
-            (QuestManager.IsQuestComplete(69341) && quest.Ids.Contains(69340)) ||
-            // An Ill-conceived Venture
-            (QuestManager.IsQuestComplete(66968) && (quest.Ids.Contains(66969) || quest.Ids.Contains(66970))) ||
-            (QuestManager.IsQuestComplete(66969) && (quest.Ids.Contains(66968) || quest.Ids.Contains(66970))) ||
-            (QuestManager.IsQuestComplete(66970) && (quest.Ids.Contains(66968) || quest.Ids.Contains(66969))) ||
-            // A Self-Improving Man | If I Had a Glamour
-            (QuestManager.IsQuestComplete(66957) && quest.Ids.Contains(68553)) ||
-            (QuestManager.IsQuestComplete(68553) && quest.Ids.Contains(66957)) ||
-            // Submission Impossible | Absolutely Glamourous
-            (QuestManager.IsQuestComplete(66958) && quest.Ids.Contains(68554)) ||
-            (QuestManager.IsQuestComplete(68554) && quest.Ids.Contains(66958)))
+        foreach (List<uint> exclusive in _exlusiveQuests)
+        {
+          if (!exclusive.Any(quest.Ids.Contains)) continue;
+
+          bool shouldRemove = exclusive.Any((id) => QuestManager.IsQuestComplete(id) && !quest.Ids.Contains(id));
+          if (shouldRemove)
+          {
+            questData.Quests.Remove(quest);
+            break;
+          }
+        }
+
+        if (_retiredQuests.Any(quest.Ids.Contains) && !IsQuestComplete(quest))
         {
           questData.Quests.Remove(quest);
+          break;
         }
 
         if (IsQuestComplete(quest)) questData.NumComplete++;
@@ -434,6 +440,6 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
       QuestManager.IsQuestComplete(65883) && !QuestManager.IsQuestComplete(65882) ? [65882, 65719] :
       // Arcanist
       QuestManager.IsQuestComplete(65991) && !QuestManager.IsQuestComplete(65990) ? [65990, 65987] : []);
-    _logger.Debug($"Start Class {_startClass}");
+    _logger.Debug($"Start Class [{string.Join(", ", _startClass)}]");
   }
 }

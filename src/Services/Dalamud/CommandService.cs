@@ -2,7 +2,7 @@ namespace QuestTracker.Services;
 
 public interface ICommandService : IHostedService;
 
-public class CommandService(ILogger _logger, IWindowService _windowService, ICommandManager _commandManager) : ICommandService
+public class CommandService(ILogger _logger, IDataService _dataService, IWindowService _windowService, ICommandManager _commandManager) : ICommandService
 {
   private const string QuestTrackerCommand = "/questtracker";
   private const string QuestTrackerCommandAlias = "/qt";
@@ -45,7 +45,11 @@ public class CommandService(ILogger _logger, IWindowService _windowService, ICom
       case "help":
       case "?":
         _logger.Chat("Available commands:");
+        _logger.Chat($"  {command} reset - Resets the Quest Tracker");
         _logger.Chat($"  {command} - Opens the QuestTracker window");
+        break;
+      case "reset":
+        _dataService.Reset();
         break;
       default:
         _logger.Chat("Invalid command:");

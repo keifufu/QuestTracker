@@ -39,7 +39,7 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
     using ImRaii.ChildDisposable child = ImRaii.Child("##overviewTab", ImGuiHelpers.ScaledVector2(0), true);
     if (!child.Success) return;
 
-    using ImRaii.TableDisposable table = ImRaii.Table("##overviewTable", 3);
+    using ImRaii.TableDisposable table = ImRaii.Table("##overviewTable", 3, ImGuiTableFlags.SizingStretchSame);
     if (!table.Success) return;
 
     ImGui.TableSetupColumn("##title");
@@ -133,7 +133,6 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
                 _categorySelection = category;
                 _subcategorySelection =
                     _categorySelection.Categories.Find(c => !c.Hide);
-                _configuration.Save();
               }
             }
           }
@@ -293,8 +292,6 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
     {
       _subcategorySelection = directParentCategory;
     }
-
-    _configuration.Save();
   }
 
   private void GetQuests(QuestData questData, string categoryPath, List<(Types.Quest quest, string categoryPath)> allQuests)
@@ -316,7 +313,7 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
 
   private void DrawQuestTable(List<Types.Quest> quests)
   {
-    using ImRaii.TableDisposable table = ImRaii.Table("##questTable", 4);
+    using ImRaii.TableDisposable table = ImRaii.Table("##questTable", 4, ImGuiTableFlags.SizingStretchSame);
     if (!table.Success) return;
 
     ImGui.TableSetupColumn("##check", ImGuiTableColumnFlags.None, 0.10f);
@@ -411,20 +408,23 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
     }
   }
 
-  private void ResetSelections()
+  public void Reset()
   {
-    if (_categorySelection == null || _categorySelection.Hide)
+    ResetSelections(true);
+  }
+
+  private void ResetSelections(bool force = false)
+  {
+    if (_categorySelection == null || _categorySelection.Hide || force)
     {
       _categorySelection = _dataService.QuestData.Categories.Find(c => !c.Hide);
       _subcategorySelection = _categorySelection?.Categories.Find(c => !c.Hide);
     }
 
-    if (_subcategorySelection == null || _subcategorySelection.Hide)
+    if (_subcategorySelection == null || _subcategorySelection.Hide || force)
     {
       _subcategorySelection = _categorySelection?.Categories.Find(c => !c.Hide);
     }
-
-    _configuration.Save();
   }
 
   private string GetDisplayText(QuestData? questData)

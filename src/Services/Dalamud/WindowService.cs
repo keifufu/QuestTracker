@@ -5,7 +5,7 @@ public interface IWindowService : IHostedService
   void Toggle();
 }
 
-public class WindowService(ILogger _logger, MainWindow _mainWindow, WindowSystem _windowSystem, IDalamudPluginInterface _pluginInterface) : IWindowService
+public class WindowService(ILogger _logger, IDataService _dataService, MainWindow _mainWindow, WindowSystem _windowSystem, IDalamudPluginInterface _pluginInterface) : IWindowService
 {
   public Task StartAsync(CancellationToken cancellationToken)
   {
@@ -15,6 +15,8 @@ public class WindowService(ILogger _logger, MainWindow _mainWindow, WindowSystem
     _pluginInterface.UiBuilder.Draw += UiBuilderOnDraw;
     _pluginInterface.UiBuilder.OpenConfigUi += Toggle;
     _pluginInterface.UiBuilder.OpenMainUi += Toggle;
+
+    _dataService.OnReset += _mainWindow.Reset;
 
 #if DEBUG
     _mainWindow.IsOpen = true; ;
@@ -30,6 +32,7 @@ public class WindowService(ILogger _logger, MainWindow _mainWindow, WindowSystem
     _pluginInterface.UiBuilder.Draw -= UiBuilderOnDraw;
 
     _windowSystem.RemoveAllWindows();
+    _dataService.OnReset -= _mainWindow.Reset;
 
     return _logger.ServiceLifecycle();
   }
