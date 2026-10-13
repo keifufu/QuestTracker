@@ -3,23 +3,19 @@ namespace QuestTracker;
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
-  public int Version { get; set; } = 0;
-  public int DisplayOption { get; set; } = 0;
+  public int Version { get; set; }
+  public int DisplayOption { get; set; }
   public bool ShowCount { get; set; } = true;
   public bool ShowPercentage { get; set; } = true;
-  public bool ExcludeOtherQuests { get; set; } = false;
-  public bool ExcludeLevequests { get; set; } = false;
+  public bool ExcludeOtherQuests { get; set; }
+  public bool ExcludeLevequests { get; set; }
 
   [NonSerialized]
-  private IDalamudPluginInterface PluginInterface = null!;
+  private IDalamudPluginInterface _pluginInterface = null!;
 
   public void Initialize(IDalamudPluginInterface pluginInterface)
-  {
-    PluginInterface = pluginInterface;
-  }
+    => _pluginInterface = pluginInterface;
 
   public void Save()
-  {
-    PluginInterface.SavePluginConfig(this);
-  }
+    => _pluginInterface.SavePluginConfig(this);
 }

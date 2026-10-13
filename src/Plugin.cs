@@ -3,20 +3,18 @@ using ILogger = QuestTracker.Services.ILogger;
 
 namespace QuestTracker;
 
-public sealed class Plugin : IDalamudPlugin
+public sealed class Plugin : IAsyncDalamudPlugin
 {
   private readonly IHost _host;
 
   public Plugin(
     IChatGui chatGui,
     IGameGui gameGui,
-    IToastGui toastGui,
     IPluginLog pluginLog,
     IClientState clientState,
     IDataManager dataManager,
     ICommandManager commandManager,
-    IDalamudPluginInterface pluginInterface,
-    INotificationManager notificationManager
+    IDalamudPluginInterface pluginInterface
   )
   {
     _host = new HostBuilder()
@@ -30,13 +28,11 @@ public sealed class Plugin : IDalamudPlugin
       {
         collection.AddSingleton(chatGui);
         collection.AddSingleton(gameGui);
-        collection.AddSingleton(toastGui);
         collection.AddSingleton(pluginLog);
         collection.AddSingleton(clientState);
         collection.AddSingleton(dataManager);
         collection.AddSingleton(commandManager);
         collection.AddSingleton(pluginInterface);
-        collection.AddSingleton(notificationManager);
 
         collection.AddSingleton<MainWindow>();
         collection.AddSingleton<ILogger, Logger>();
@@ -51,8 +47,6 @@ public sealed class Plugin : IDalamudPlugin
         collection.AddHostedService(sp => sp.GetRequiredService<IWindowService>());
         collection.AddHostedService(sp => sp.GetRequiredService<ICommandService>());
       }).Build();
-
-    _host.StartAsync();
   }
 
   private Configuration InitializeConfiguration(IServiceProvider s)
@@ -63,9 +57,12 @@ public sealed class Plugin : IDalamudPlugin
     return configuration;
   }
 
-  public void Dispose()
+  public async Task LoadAsync(CancellationToken cancellationToken)
+    => await _host.StartAsync(cancellationToken);
+
+  public async ValueTask DisposeAsync()
   {
-    _host.StopAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+    await _host.StopAsync();
     _host.Dispose();
   }
 }

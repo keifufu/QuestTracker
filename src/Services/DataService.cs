@@ -11,7 +11,17 @@ public interface IDataService : IHostedService
   void UpdateQuestData();
 }
 
-public class DataService(ILogger _logger, Configuration _configuration, IDataManager _dataManager, IClientState _clientState) : IDataService
+public class JobLeveItems
+{
+  public required Dictionary<uint, int> Items { set; get; }
+  public required List<string> Leves { set; get; }
+};
+
+public partial class DataService(
+  ILogger _logger,
+  IClientState _clientState,
+  IDataManager _dataManager,
+  Configuration _configuration) : IDataService
 {
   public event System.Action? OnReset;
   public QuestData RawQuestData { get; private set; } = new();
@@ -78,7 +88,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
     [66702, 66706, 66710], [66699, 66703, 66707]
   ];
 
-  private readonly List<List<uint>> _exlusiveQuests = [
+  private readonly List<List<uint>> _exclusiveQuests = [
     [67001, 67002, 67003], // ARR "Call of the Wild" Tribal Alliance Quests
     [69256, 69257], // YorHa "Heads or Tails"
     [69336, 69337], // Qitari "The First Stela"
@@ -125,27 +135,36 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
       }
     }
 
-    JournalSection otherQuests = _dataManager.GetExcelSheet<JournalSection>(ClientLanguage.English).FirstOrNull(r => r.Name == "Other Quests") ?? throw new Exception("Missing 'Other Quests'.");
-    string defaultMainCategory = _dataManager.GetExcelSheet<JournalSection>(lang).First(r => r.RowId == otherQuests.RowId).Name.ToString();
+    JournalSection otherQuests = _dataManager.GetExcelSheet<JournalSection>(ClientLanguage.English)
+      .FirstOrNull(r => r.Name == "Other Quests") ?? throw new InvalidDataException("Missing 'Other Quests'.");
+    string defaultMainCategory = _dataManager.GetExcelSheet<JournalSection>(lang)
+      .First(r => r.RowId == otherQuests.RowId).Name.ToString();
     string defaultMainCategoryEnglish = otherQuests.Name.ToString();
 
+    Dictionary<string, JobLeveItems> jobLeveItems = [];
     foreach (JournalCategory journalCategory in _dataManager.GetExcelSheet<JournalCategory>(lang))
     {
       bool isSidequestCategory = sidequestCategories.Contains(journalCategory.RowId);
       string mainCategory = TrimJournalSection(journalCategory.JournalSection.ValueNullable?.Name.ToString() ?? defaultMainCategory);
-      string englishMainCategory = TrimJournalSection(_dataManager.GetExcelSheet<JournalCategory>(ClientLanguage.English).GetRow(journalCategory.RowId).JournalSection.ValueNullable?.Name.ToString() ?? defaultMainCategoryEnglish);
+      string englishMainCategory = TrimJournalSection(_dataManager.GetExcelSheet<JournalCategory>(ClientLanguage.English)
+        .GetRow(journalCategory.RowId).JournalSection.ValueNullable?.Name.ToString() ?? defaultMainCategoryEnglish);
       string subCategory = journalCategory.Name.ToString();
-      string englishSubCategory = _dataManager.GetExcelSheet<JournalCategory>(ClientLanguage.English).GetRow(journalCategory.RowId).Name.ToString();
+      string englishSubCategory = _dataManager.GetExcelSheet<JournalCategory>(ClientLanguage.English)
+        .GetRow(journalCategory.RowId).Name.ToString();
 
       if (englishMainCategory == "Levequests") LevequestsTitle = mainCategory;
       if (englishMainCategory == "Other Quests") OtherQuestsTitle = mainCategory;
 
-      foreach (JournalGenre journalGenre in _dataManager.GetExcelSheet<JournalGenre>(lang).Where((r) => r.JournalCategory.RowId == journalCategory.RowId))
+      IEnumerable<JournalGenre> journalGenres = _dataManager.GetExcelSheet<JournalGenre>(lang)
+        .Where((r) => r.JournalCategory.RowId == journalCategory.RowId);
+      foreach (JournalGenre journalGenre in journalGenres)
       {
         if (journalGenre.RowId == 0) subCategory = "Quasi-Quests";
         string section = journalGenre.Name.ToString();
 
-        foreach (Lumina.Excel.Sheets.Quest quest in _dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>(lang).Where((r) => r.JournalGenre.RowId == journalGenre.RowId && !r.Name.IsEmpty))
+        IEnumerable<Lumina.Excel.Sheets.Quest> quests = _dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>(lang)
+          .Where((r) => r.JournalGenre.RowId == journalGenre.RowId && !r.Name.IsEmpty);
+        foreach (Lumina.Excel.Sheets.Quest quest in quests)
         {
           if (isSidequestCategory) section = quest.PlaceName.Value.Name.ToString();
 
@@ -195,7 +214,9 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           continue;
         }
 
-        foreach (Leve leve in _dataManager.GetExcelSheet<Leve>(lang).Where((r) => r.JournalGenre.RowId == journalGenre.RowId && !r.Name.IsEmpty))
+        IEnumerable<Leve> leves = _dataManager.GetExcelSheet<Leve>(lang)
+          .Where((r) => r.JournalGenre.RowId == journalGenre.RowId && !r.Name.IsEmpty);
+        foreach (Leve leve in leves)
         {
           section = leve.PlaceNameStart.Value.Name.ToString();
 
@@ -203,6 +224,56 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           if (_gridaniaStartLeves.Contains(leve.RowId)) start = "Gridania";
           if (_limsaStartLeves.Contains(leve.RowId)) start = "Limsa Lominsa";
           if (_uldahStartLeves.Contains(leve.RowId)) start = "Ul'dah";
+
+          if (leve.LeveAssignmentType.RowId is >= 5 and <= 12)
+          {
+            if (_dataManager.GetExcelSheet<CraftLeve>().TryGetRow(leve.DataId.RowId, out CraftLeve craftLeve))
+            {
+              string expansion = leve.ClassJobLevel switch
+              {
+                >= 50 and < 60 => "Heavensward",
+                >= 60 and < 70 => "Stormblood",
+                >= 70 and < 80 => "Shadowbringers",
+                >= 80 and < 90 => "Endwalker",
+                >= 90 and < 100 => "Dawntrail",
+                >= 100 => "Evercold",
+                _ => "A Realm Reborn"
+              };
+              string job = leve.LeveAssignmentType.Value.Name.ToString();
+              string largeScale = leve.Name.ToString().Contains("(L)") ? " (Large-scale)" : "";
+              string category = $"{expansion} Leves{largeScale} - {job}";
+              for (int i = 0; i < craftLeve.Item.Count; i++)
+              {
+                Lumina.Excel.RowRef<Item> item = craftLeve.Item[i];
+                int count = craftLeve.ItemCount[i] * (craftLeve.Repeats + 1);
+                if (item.IsValid && item.RowId != 0)
+                {
+                  if (jobLeveItems.TryGetValue(category, out JobLeveItems? leveItems))
+                  {
+                    if (!leveItems.Leves.Contains(leve.Name.ToString())) leveItems.Leves.Add(leve.Name.ToString());
+                    if (leveItems.Items.TryGetValue(item.RowId, out int leveItemCount))
+                    {
+                      leveItems.Items[item.RowId] = leveItemCount + count;
+                    }
+                    else
+                    {
+                      leveItems.Items[item.RowId] = count;
+                    }
+                  }
+                  else
+                  {
+                    Dictionary<uint, int> items = [];
+                    items.Add(item.RowId, count);
+                    jobLeveItems.Add(category, new JobLeveItems
+                    {
+                      Items = items,
+                      Leves = [leve.Name.ToString()],
+                    });
+                  }
+                }
+              }
+            }
+          }
 
           if (_retiredLeves.Contains(leve.RowId)) continue;
           AddQuest((mainCategory, englishMainCategory), (subCategory, englishSubCategory), section, new()
@@ -217,9 +288,32 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           }, leve.PlaceNameStart.RowId);
         }
       }
+
+      string levesText = "";
+      foreach (KeyValuePair<string, JobLeveItems> kvp in jobLeveItems)
+      {
+        string items = "";
+        foreach (KeyValuePair<uint, int> kvp2 in kvp.Value.Items)
+        {
+          if (items.Length != 0) items += ";";
+          items += $"{kvp2.Key},null,{kvp2.Value}";
+        }
+        string base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(items));
+        levesText += $"{kvp.Key} ({kvp.Value.Leves.Count})\nhttps://ffxivteamcraft.com/import/{base64}\n\n";
+      }
+
+      File.WriteAllText("/games/ffxiv/leves.txt", levesText);
     }
 
-    List<string> mainCategoryOrder = ["Main Scenario", "Chronicles of a New Era", "Sidequests", "Allied Society Quests", "Class & Job Quests", "Other Quests", "Levequests"];
+    List<string> mainCategoryOrder = [
+      "Main Scenario",
+      "Chronicles of a New Era",
+      "Sidequests",
+      "Allied Society Quests",
+      "Class & Job Quests",
+      "Other Quests",
+      "Levequests"
+    ];
     RawQuestData.Categories.Sort((a, b) =>
     {
       int ia = mainCategoryOrder.IndexOf(a.EnglishTitle);
@@ -234,7 +328,10 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
     {
       if (questData.EnglishTitle == "Allied Society Quests")
       {
-        List<string> tribeOrder = [.. _dataManager.GetExcelSheet<BeastTribe>(ClientLanguage.English).Select((r) => r.NameRelation.ToString()).ToList(), "Intersocietal"];
+        List<string> tribeOrder = [
+          .. _dataManager.GetExcelSheet<BeastTribe>(ClientLanguage.English).Select((r) => r.NameRelation.ToString()).ToList(),
+          "Intersocietal"
+        ];
         questData.Categories.Sort((a, b) =>
         {
           string fa = a.EnglishTitle.Split(' ')[0];
@@ -279,12 +376,23 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
     OnReset?.Invoke();
   }
 
-  private string TrimJournalSection(string journalSection)
-  {
-    return Regex.Replace(Regex.Replace(journalSection, @"\s*\([^)]*\)", ""), @"[12]\uFF08.*?\uFF09", "").Trim();
-  }
+  [GeneratedRegex(@"\s*\([^)]*\)")]
+  private static partial Regex ParenthesizedSectionRegex();
 
-  private void AddQuest((string localizedCategory, string englishCategory) category, (string localizedSubCategory, string englishSubCategory) subCategory, string section, Types.Quest quest, uint sortKey = 0)
+  [GeneratedRegex(@"[12]\uFF08.*?\uFF09")]
+  private static partial Regex FullWidthParenthesizedSectionRegex();
+
+  private string TrimJournalSection(string journalSection)
+    => FullWidthParenthesizedSectionRegex()
+      .Replace(ParenthesizedSectionRegex().Replace(journalSection, ""), "")
+      .Trim();
+
+  private void AddQuest(
+    (string localizedCategory, string englishCategory) category,
+    (string localizedSubCategory, string englishSubCategory) subCategory,
+    string section,
+    Types.Quest quest,
+    uint sortKey = 0)
   {
     QuestData FindOrCreateCategory(List<QuestData> list, (string localizedTitle, string englishTitle) title)
     {
@@ -316,9 +424,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
   }
 
   public void UpdateQuestData()
-  {
-    UpdateQuestData(QuestData);
-  }
+    => UpdateQuestData(QuestData);
 
   private void UpdateQuestData(QuestData questData)
   {
@@ -374,7 +480,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
           }
         }
 
-        foreach (List<uint> exclusive in _exlusiveQuests)
+        foreach (List<uint> exclusive in _exclusiveQuests)
         {
           if (!exclusive.Any(quest.Ids.Contains)) continue;
 
@@ -389,7 +495,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
         if (_retiredQuests.Any(quest.Ids.Contains) && !IsQuestComplete(quest))
         {
           questData.Quests.Remove(quest);
-          break;
+          continue;
         }
 
         if (IsQuestComplete(quest)) questData.NumComplete++;
@@ -406,22 +512,22 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
   private void DetermineStartArea()
   {
     _startArea = QuestManager.IsQuestComplete(65575) ? "Gridania" :
-                               QuestManager.IsQuestComplete(65643) ? "Limsa Lominsa" :
-                               QuestManager.IsQuestComplete(66130) ? "Ul'dah" : "";
+                 QuestManager.IsQuestComplete(65643) ? "Limsa Lominsa" :
+                 QuestManager.IsQuestComplete(66130) ? "Ul'dah" : "";
     _logger.Debug($"Start Area {_startArea}");
   }
 
   private void DetermineGrandCompany()
   {
     _grandCompany = QuestManager.IsQuestComplete(66216) ? "Order of the Twin Adder" :
-                                  QuestManager.IsQuestComplete(66217) ? "Maelstrom" :
-                                  QuestManager.IsQuestComplete(66218) ? "Immortal Flames" : "";
+                    QuestManager.IsQuestComplete(66217) ? "Maelstrom" :
+                    QuestManager.IsQuestComplete(66218) ? "Immortal Flames" : "";
     _logger.Debug($"Grand Company {_grandCompany}");
   }
 
   private void DetermineStartClass()
   {
-    _startClass = (
+    _startClass =
       // Gladiator
       QuestManager.IsQuestComplete(65792) && !QuestManager.IsQuestComplete(65822) ? [65822, 65713] :
       // Pugilist
@@ -439,7 +545,7 @@ public class DataService(ILogger _logger, Configuration _configuration, IDataMan
       // Thaumaturge
       QuestManager.IsQuestComplete(65883) && !QuestManager.IsQuestComplete(65882) ? [65882, 65719] :
       // Arcanist
-      QuestManager.IsQuestComplete(65991) && !QuestManager.IsQuestComplete(65990) ? [65990, 65987] : []);
+      QuestManager.IsQuestComplete(65991) && !QuestManager.IsQuestComplete(65990) ? [65990, 65987] : [];
     _logger.Debug($"Start Class [{string.Join(", ", _startClass)}]");
   }
 }

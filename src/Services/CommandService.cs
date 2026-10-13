@@ -2,7 +2,12 @@ namespace QuestTracker.Services;
 
 public interface ICommandService : IHostedService;
 
-public class CommandService(ILogger _logger, IDataService _dataService, IWindowService _windowService, ICommandManager _commandManager) : ICommandService
+public class CommandService(
+  ILogger _logger,
+  IDataService _dataService,
+  IWindowService _windowService,
+  ICommandManager _commandManager,
+  IDalamudPluginInterface _pluginInterface) : ICommandService
 {
   private const string QuestTrackerCommand = "/questtracker";
   private const string QuestTrackerCommandAlias = "/qt";
@@ -29,7 +34,7 @@ public class CommandService(ILogger _logger, IDataService _dataService, IWindowS
     return _logger.ServiceLifecycle();
   }
 
-  private async void OnCommand(string command, string arguments)
+  private void OnCommand(string command, string arguments)
   {
     _logger.Debug($"command::'{command}' arguments::'{arguments}'");
 
@@ -42,10 +47,15 @@ public class CommandService(ILogger _logger, IDataService _dataService, IWindowS
 
     switch (args[0])
     {
+      case "version":
+        _logger.Chat($"v{_pluginInterface.Manifest.AssemblyVersion}");
+        break;
       case "help":
       case "?":
         _logger.Chat("Available commands:");
-        _logger.Chat($"  {command} reset - Resets the Quest Tracker");
+        _logger.Chat($"  {command} help - Display this help menu");
+        _logger.Chat($"  {command} version - Print the plugin's version");
+        _logger.Chat($"  {command} reset - Resets cached data (completed quests, etc)");
         _logger.Chat($"  {command} - Opens the QuestTracker window");
         break;
       case "reset":

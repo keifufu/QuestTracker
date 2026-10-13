@@ -5,7 +5,12 @@ public interface IWindowService : IHostedService
   void Toggle();
 }
 
-public class WindowService(ILogger _logger, IDataService _dataService, MainWindow _mainWindow, WindowSystem _windowSystem, IDalamudPluginInterface _pluginInterface) : IWindowService
+public class WindowService(
+  ILogger _logger,
+  MainWindow _mainWindow,
+  IDataService _dataService,
+  WindowSystem _windowSystem,
+  IDalamudPluginInterface _pluginInterface) : IWindowService
 {
   public Task StartAsync(CancellationToken cancellationToken)
   {
@@ -37,13 +42,7 @@ public class WindowService(ILogger _logger, IDataService _dataService, MainWindo
     return _logger.ServiceLifecycle();
   }
 
-  public void Toggle()
-  {
-    _mainWindow.Toggle();
-  }
+  public void Toggle() => _mainWindow.Toggle();
 
-  private void UiBuilderOnDraw()
-  {
-    _windowSystem.Draw();
-  }
+  private void UiBuilderOnDraw() => _windowSystem.Draw();
 }

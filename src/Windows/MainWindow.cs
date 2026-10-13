@@ -1,7 +1,13 @@
 namespace QuestTracker.Windows;
 
-public class MainWindow(Configuration _configuration, IDataService _dataService, IGameGui _gameGui, IDataManager _dataManager) : Window("QuestTracker##QuestTrackerMainWindow")
+public class MainWindow(
+  IGameGui _gameGui,
+  IDataService _dataService,
+  IDataManager _dataManager,
+  Configuration _configuration) : Window("QuestTracker##QuestTrackerMainWindow")
 {
+  private const double UpdateInterval = 1.0;
+  private double _timeSinceLastUpdate = UpdateInterval;
   private string _searchQuery = "";
 
   private QuestData? _categorySelection;
@@ -9,7 +15,12 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
 
   public override void Draw()
   {
-    _dataService.UpdateQuestData();
+    _timeSinceLastUpdate += ImGui.GetIO().DeltaTime;
+    if (_timeSinceLastUpdate >= UpdateInterval)
+    {
+      _timeSinceLastUpdate = 0;
+      _dataService.UpdateQuestData();
+    }
 
     Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
     ImGui.SetNextWindowSize(new Vector2(475, 375), ImGuiCond.FirstUseEver);
@@ -19,19 +30,17 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
       MaximumSize = new Vector2(float.MaxValue)
     };
 
-    using (ImRaii.TabBarDisposable tabBar = ImRaii.TabBar("##tabBar", ImGuiTabBarFlags.None))
-    {
-      if (!tabBar.Success) return;
+    using ImRaii.TabBarDisposable tabBar = ImRaii.TabBar("##tabBar", ImGuiTabBarFlags.None);
+    if (!tabBar.Success) return;
 
-      using (ImRaii.TabItemDisposable tabItem = ImRaii.TabItem("Overview"))
-        if (tabItem.Success) DrawOverviewTab();
+    using (ImRaii.TabItemDisposable tabItem = ImRaii.TabItem("Overview"))
+      if (tabItem.Success) DrawOverviewTab();
 
-      using (ImRaii.TabItemDisposable tabItem = ImRaii.TabItem("Quests"))
-        if (tabItem.Success) DrawQuestsTab();
+    using (ImRaii.TabItemDisposable tabItem = ImRaii.TabItem("Quests"))
+      if (tabItem.Success) DrawQuestsTab();
 
-      using (ImRaii.TabItemDisposable tabItem = ImRaii.TabItem("Settings"))
-        if (tabItem.Success) DrawSettingsTab();
-    }
+    using (ImRaii.TabItemDisposable tabItem = ImRaii.TabItem("Settings"))
+      if (tabItem.Success) DrawSettingsTab();
   }
 
   private void DrawOverviewTab()
@@ -73,7 +82,8 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
 
     foreach (QuestData category in _dataService.QuestData.Categories)
     {
-      if ((category.Title == _dataService.LevequestsTitle && _configuration.ExcludeLevequests) || (category.Title == _dataService.OtherQuestsTitle && _configuration.ExcludeOtherQuests))
+      if ((category.Title == _dataService.LevequestsTitle && _configuration.ExcludeLevequests)
+       || (category.Title == _dataService.OtherQuestsTitle && _configuration.ExcludeOtherQuests))
       {
         ImGui.TableNextColumn();
         ImGui.TextDisabled(category.Title);
@@ -185,8 +195,10 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
 
   private void DrawSearchResults()
   {
-    List<(Types.Quest quest, string categoryPath, QuestData topLevelCategory, QuestData directParentCategory)> allQuests = GetQuests();
-    List<(Types.Quest quest, string categoryPath, QuestData topLevelCategory, QuestData directParentCategory)> filteredQuests = allQuests.Where(questWithCategory =>
+    List<(Types.Quest quest, string categoryPath, QuestData topLevelCategory, QuestData directParentCategory)> allQuests
+      = GetQuests();
+    List<(Types.Quest quest, string categoryPath, QuestData topLevelCategory, QuestData directParentCategory)> filteredQuests
+      = allQuests.Where(questWithCategory =>
         questWithCategory.quest.Title.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
         questWithCategory.quest.Area.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
 
@@ -219,9 +231,8 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
         ImGui.TableNextColumn();
         if (_dataService.IsQuestComplete(quest))
         {
-          ImGui.PushFont(UiBuilder.IconFont);
-          ImGui.TextUnformatted(FontAwesomeIcon.Check.ToIconString());
-          ImGui.PopFont();
+          using (ImRaii.PushFont(UiBuilder.IconFont))
+            ImGui.TextUnformatted(FontAwesomeIcon.Check.ToIconString());
           quest.Hide = _configuration.DisplayOption == 2;
         }
 
@@ -261,7 +272,11 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
     return allQuests;
   }
 
-  private void GetQuestsData(QuestData currentCategory, QuestData topLevelCategory, string categoryPath, List<(Types.Quest quest, string categoryPath, QuestData topLevelCategory, QuestData directParentCategory)> allQuests)
+  private void GetQuestsData(
+    QuestData currentCategory,
+    QuestData topLevelCategory,
+    string categoryPath,
+    List<(Types.Quest quest, string categoryPath, QuestData topLevelCategory, QuestData directParentCategory)> allQuests)
   {
     foreach (Types.Quest quest in currentCategory.Quests)
     {
@@ -328,9 +343,8 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
         ImGui.TableNextColumn();
         if (_dataService.IsQuestComplete(quest))
         {
-          ImGui.PushFont(UiBuilder.IconFont);
-          ImGui.TextUnformatted(FontAwesomeIcon.Check.ToIconString());
-          ImGui.PopFont();
+          using (ImRaii.PushFont(UiBuilder.IconFont))
+            ImGui.TextUnformatted(FontAwesomeIcon.Check.ToIconString());
           quest.Hide = _configuration.DisplayOption == 2;
         }
 
@@ -409,9 +423,7 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
   }
 
   public void Reset()
-  {
-    ResetSelections(true);
-  }
+    => ResetSelections(true);
 
   private void ResetSelections(bool force = false)
   {
@@ -440,13 +452,15 @@ public class MainWindow(Configuration _configuration, IDataService _dataService,
   {
     if (quest.IsLeve)
     {
-      Level level = _dataManager.GetExcelSheet<Leve>().First(q => quest.Ids.Contains(q.RowId) && q.LevelLevemete.ValueNullable != null).LevelLevemete.Value;
+      Level level = _dataManager.GetExcelSheet<Leve>()
+        .First(q => quest.Ids.Contains(q.RowId) && q.LevelLevemete.ValueNullable != null).LevelLevemete.Value;
       MapLinkPayload mapLink = new(level.Territory.RowId, level.Map.RowId, (int)(level.X * 1_000f), (int)(level.Z * 1_000f));
       _gameGui.OpenMapWithMapLink(mapLink);
     }
     else
     {
-      Level level = _dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().First(q => quest.Ids.Contains(q.RowId) && q.IssuerLocation.ValueNullable != null).IssuerLocation.Value;
+      Level level = _dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>()
+        .First(q => quest.Ids.Contains(q.RowId) && q.IssuerLocation.ValueNullable != null).IssuerLocation.Value;
       MapLinkPayload mapLink = new(level.Territory.RowId, level.Map.RowId, (int)(level.X * 1_000f), (int)(level.Z * 1_000f));
       _gameGui.OpenMapWithMapLink(mapLink);
     }
