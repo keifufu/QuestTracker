@@ -376,16 +376,8 @@ public partial class DataService(
     OnReset?.Invoke();
   }
 
-  [GeneratedRegex(@"\s*\([^)]*\)")]
-  private static partial Regex ParenthesizedSectionRegex();
-
-  [GeneratedRegex(@"[12]\uFF08.*?\uFF09")]
-  private static partial Regex FullWidthParenthesizedSectionRegex();
-
   private string TrimJournalSection(string journalSection)
-    => FullWidthParenthesizedSectionRegex()
-      .Replace(ParenthesizedSectionRegex().Replace(journalSection, ""), "")
-      .Trim();
+    => Regex.Replace(Regex.Replace(journalSection, @"\s*\([^)]*\)", ""), @"[12]\uFF08.*?\uFF09", "").Trim();
 
   private void AddQuest(
     (string localizedCategory, string englishCategory) category,
