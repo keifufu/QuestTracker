@@ -10,8 +10,8 @@ public class MainWindow(
   private double _timeSinceLastUpdate = UpdateInterval;
   private string _searchQuery = "";
 
-  private QuestData? _categorySelection;
-  private QuestData? _subcategorySelection;
+  private QuestData? _categorySelection = null;
+  private QuestData? _subcategorySelection = null;
 
   public override void Draw()
   {

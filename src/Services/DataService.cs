@@ -13,8 +13,8 @@ public interface IDataService : IHostedService
 
 public class JobLeveItems
 {
-  public required Dictionary<uint, int> Items { set; get; }
-  public required List<string> Leves { set; get; }
+  public required Dictionary<uint, int> Items;
+  public required List<string> Leves;
 };
 
 public partial class DataService(

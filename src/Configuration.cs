@@ -4,11 +4,11 @@ namespace QuestTracker;
 public class Configuration : IPluginConfiguration
 {
   public int Version { get; set; }
-  public int DisplayOption { get; set; }
-  public bool ShowCount { get; set; } = true;
-  public bool ShowPercentage { get; set; } = true;
-  public bool ExcludeOtherQuests { get; set; }
-  public bool ExcludeLevequests { get; set; }
+  public int DisplayOption = 0;
+  public bool ShowCount = true;
+  public bool ShowPercentage = true;
+  public bool ExcludeOtherQuests = false;
+  public bool ExcludeLevequests = false;
 
   [NonSerialized]
   private IDalamudPluginInterface _pluginInterface = null!;
