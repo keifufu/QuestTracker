@@ -289,6 +289,7 @@ public partial class DataService(
         }
       }
 
+#if DEBUG
       string levesText = "";
       foreach (KeyValuePair<string, JobLeveItems> kvp in jobLeveItems)
       {
@@ -303,6 +304,7 @@ public partial class DataService(
       }
 
       File.WriteAllText("/games/ffxiv/leves.txt", levesText);
+#endif
     }
 
     List<string> mainCategoryOrder = [
