@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace QuestTracker.Windows;
 
 public class MainWindow(
@@ -6,8 +8,7 @@ public class MainWindow(
   IDataManager _dataManager,
   Configuration _configuration) : Window("QuestTracker##QuestTrackerMainWindow")
 {
-  private const double UpdateInterval = 1.0;
-  private double _timeSinceLastUpdate = UpdateInterval;
+  private readonly Stopwatch _updateTimer = Stopwatch.StartNew();
   private string _searchQuery = "";
 
   private QuestData? _categorySelection = null;
@@ -15,10 +16,9 @@ public class MainWindow(
 
   public override void Draw()
   {
-    _timeSinceLastUpdate += ImGui.GetIO().DeltaTime;
-    if (_timeSinceLastUpdate >= UpdateInterval)
+    if (_updateTimer.ElapsedMilliseconds > 1000)
     {
-      _timeSinceLastUpdate = 0;
+      _updateTimer.Restart();
       _dataService.UpdateQuestData();
     }
 
